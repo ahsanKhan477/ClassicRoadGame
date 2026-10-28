@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Road Fighter Classic — Touchscreen Edition</title>
+    <link rel="stylesheet" href="Style.css">
+</head>
+<body>
+    <div id="game-container">
+        <!-- Game Canvas -->
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- HUD (Heads Up Display) -->
+        <div id="hud" class="hidden">
+            <div class="hud-top">
+                <div class="hud-item">SCORE: <span id="scoreVal">0</span></div>
+                <div class="hud-item">DIST: <span id="distVal">0</span>m</div>
+                <div class="hud-item">SPEED: <span id="speedVal">0</span> KM/H</div>
+                <div class="hud-controls">
+                    <button id="muteBtn" class="hud-btn" title="Mute/Unmute">🔊</button>
+                    <button id="pauseBtn" class="hud-btn" title="Pause">⏸</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Touch Controls Bar -->
+        <div id="touch-controls" class="hidden">
+            <button id="btnLeft" class="touch-btn">◀ STEER LEFT</button>
+            <button id="btnRight" class="touch-btn">STEER RIGHT ▶</button>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="startScreen" class="screen">
+            <div class="arcade-cabinet">
+                <h1 class="game-title">ROAD FIGHTER</h1>
+                <h2 class="game-subtitle">CLASSIC ARCADE EDITION</h2>
+                <div class="cabinet-banner"></div>
+                <p class="instructions">Steer your car, avoid obstacles, pass enemy racers, and survive!</p>
+                <button id="startBtn" class="arcade-btn">INSERT COIN / PLAY</button>
+                <div class="controls-hint">
+                    <span>📱 Touch Left/Right buttons or Swipe</span>
+                    <span>💻 Keyboard: Arrow Keys or A / D</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pause Screen -->
+        <div id="pauseScreen" class="screen hidden">
+            <div class="modal-box">
+                <h2>GAME PAUSED</h2>
+                <button id="resumeBtn" class="arcade-btn">RESUME</button>
+                <button id="restartBtn" class="arcade-btn secondary">RESTART</button>
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="screen hidden">
+            <div class="modal-box game-over-box">
+                <h2 class="glitch-text">GAME OVER</h2>
+                <div class="score-summary">
+                    <p>FINAL SCORE: <span id="finalScore">0</span></p>
+                    <p>DISTANCE: <span id="finalDist">0</span>m</p>
+                    <p>BEST SCORE: <span id="bestScore">0</span></p>
+                </div>
+                <button id="restartGameBtn" class="arcade-btn">PLAY AGAIN</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
