@@ -109,13 +109,14 @@ function playSound(type) {
     }
 }
 
-// Game Variables (Adjusted speed & gradual acceleration)
+// Game Variables & Time Tracking
 let score = 0;
 let distance = 0;
 let speed = 0;
-let maxSpeed = 140; // Max speed reduced to a realistic 140 KM/H
-let acceleration = 0.2; // Slower, gradual acceleration rate
+let maxSpeed = 160; 
+let acceleration = 0.25; 
 let roadScroll = 0;
+let gameTime = 0; // Tracks elapsed playing time in seconds
 let highScore = localStorage.getItem('roadFighterHighScore') || 0;
 
 // Road parameters
@@ -131,7 +132,7 @@ const player = {
     y: VIRTUAL_HEIGHT - 140,
     width: 40,
     height: 75,
-    targetLane: 1.5, // 0 to 3
+    targetLane: 1.5,
     color: '#ff2222',
     roofColor: '#ffffff',
     steerSpeed: 0.25
@@ -171,7 +172,7 @@ function triggerShake(duration, intensity) {
     screenShakeIntensity = intensity;
 }
 
-// Lane Shift Helper for snappy button/tap response
+// Lane Shift Helper
 function shiftLane(direction) {
     if (gameState !== STATE.PLAYING) return;
     let currentLane = Math.round(player.targetLane);
@@ -184,14 +185,12 @@ function shiftLane(direction) {
 
 // Event Listeners for Controls
 function setupInputs() {
-    // Keyboard
     window.addEventListener('keydown', (e) => {
         if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') shiftLane('left');
         if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') shiftLane('right');
         if (e.key === 'p' || e.key === 'P') togglePause();
     });
 
-    // Touch Buttons pointer events (Instant lane change on tap/click)
     const bindButton = (elem, direction) => {
         elem.addEventListener('pointerdown', (e) => {
             e.preventDefault();
@@ -215,7 +214,6 @@ function setupInputs() {
     bindButton(btnLeft, 'left');
     bindButton(btnRight, 'right');
 
-    // Swipe Gestures on Canvas
     canvas.addEventListener('pointerdown', (e) => {
         input.touchStartX = e.clientX;
     });
@@ -282,7 +280,8 @@ function startGame() {
     score = 0;
     distance = 0;
     speed = 0;
-    maxSpeed = 140;
+    maxSpeed = 160;
+    gameTime = 0;
     enemies = [];
     particles = [];
     player.targetLane = 1.5;
@@ -317,24 +316,36 @@ function gameOver() {
     gameOverScreen.classList.remove('hidden');
 }
 
-// Spawning Enemies
+// Spawning Enemies and Trucks based on time milestones
 let spawnTimer = 0;
 function updateEnemies(dt) {
+    // Traffic gets faster and spawns quicker as gameTime increases
+    let spawnInterval = gameTime >= 120 ? 130 : (gameTime >= 60 ? 150 : 180);
     spawnTimer += speed * dt;
-    if (spawnTimer > 200) {
+
+    if (spawnTimer > spawnInterval) {
         spawnTimer = 0;
         const lane = Math.floor(Math.random() * numLanes);
-        const enemyX = roadLeft + lane * laneWidth + (laneWidth - player.width) / 2;
-        const colors = ['#33ccff', '#ffcc00', '#33ff33', '#cc33ff', '#ff9900'];
+        
+        // Trucks start appearing before 2.5 minutes (150 seconds), e.g. from 120s onwards
+        const allowTrucks = gameTime >= 120;
+        const isTruck = allowTrucks && Math.random() < 0.40; // 40% chance of truck after 2 mins
+
+        const enemyWidth = isTruck ? 46 : player.width;
+        const enemyHeight = isTruck ? 105 : player.height;
+        const enemyX = roadLeft + lane * laneWidth + (laneWidth - enemyWidth) / 2;
+        
+        const colors = isTruck ? ['#883333', '#334466', '#555555'] : ['#33ccff', '#ffcc00', '#33ff33', '#cc33ff', '#ff9900'];
         const enemyColor = colors[Math.floor(Math.random() * colors.length)];
         
         enemies.push({
             x: enemyX,
-            y: -100,
-            width: player.width,
-            height: player.height,
-            speed: (Math.random() * 1.0 + 1.8) * (speed / 100 + 0.4),
+            y: -120,
+            width: enemyWidth,
+            height: enemyHeight,
+            speed: (Math.random() * 1.0 + (isTruck ? 1.4 : 2.0)) * (speed / 120 + 0.5),
             color: enemyColor,
+            isTruck: isTruck,
             passed: false
         });
     }
@@ -346,7 +357,7 @@ function updateEnemies(dt) {
         // Check if player passed enemy
         if (!en.passed && en.y > player.y + player.height) {
             en.passed = true;
-            score += 100;
+            score += en.isTruck ? 200 : 100; // Extra points for passing trucks!
             playSound('pass');
         }
 
@@ -387,13 +398,31 @@ function createExplosion(x, y) {
     }
 }
 
-// Game Update Loop
+// Game Update Loop with Time-based Speed Milestones
 let lastTime = performance.now();
 function gameLoop(time) {
     const dt = Math.min((time - lastTime) / 1000, 0.1);
     lastTime = time;
 
     if (gameState === STATE.PLAYING) {
+        // Track elapsed playing time in seconds
+        gameTime += dt;
+
+        // Apply time-based speed milestones as requested:
+        // - After 1 min (60s): Traffic & speed get faster (maxSpeed ~180)
+        // - At 2 mins (120s): Speed reaches 200
+        // - Before 2.5 mins (150s): Trucks start appearing, speed stays around 200
+        // - At 4 mins (240s): Speed reaches 250
+        if (gameTime >= 240) {
+            maxSpeed = 250;
+        } else if (gameTime >= 120) {
+            maxSpeed = 200;
+        } else if (gameTime >= 60) {
+            maxSpeed = 180;
+        } else {
+            maxSpeed = 160;
+        }
+
         // Smoothly slide to target lane
         const targetX = roadLeft + player.targetLane * laneWidth + (laneWidth - player.width) / 2;
         player.x += (targetX - player.x) * 0.3;
@@ -401,14 +430,13 @@ function gameLoop(time) {
         // Gradual Acceleration
         if (speed < maxSpeed) {
             speed += acceleration;
+        } else if (speed > maxSpeed) {
+            speed -= acceleration; // Handle speed limits smoothly if needed
         }
 
         roadScroll += speed * dt * 2.0;
         distance += speed * dt * 0.05;
         score += speed * dt * 0.1;
-
-        // Very gradual difficulty progression
-        maxSpeed = 160 + Math.min(60, Math.floor(score / 3000) * 10);
 
         updateEnemies(dt);
 
@@ -475,7 +503,7 @@ function render() {
         ctx.lineTo(laneX, VIRTUAL_HEIGHT);
         ctx.stroke();
     }
-    ctx.setLineDash([]);
+    ctx.setLineDash();
 
     // Draw Scenery (Trees / Rocks)
     scenery.forEach(sc => {
@@ -503,9 +531,13 @@ function render() {
         }
     });
 
-    // Draw Enemy Cars
+    // Draw Enemy Vehicles & Trucks
     enemies.forEach(en => {
-        drawCar(en.x, en.y, en.width, en.height, en.color, '#222');
+        if (en.isTruck) {
+            drawTruck(en.x, en.y, en.width, en.height, en.color);
+        } else {
+            drawCar(en.x, en.y, en.width, en.height, en.color, '#222');
+        }
     });
 
     // Draw Player Car
@@ -551,6 +583,37 @@ function drawCar(x, y, w, h, bodyColor, accentColor) {
     ctx.fillStyle = '#ffcc00';
     ctx.fillRect(x + 4, y, 6, 4);
     ctx.fillRect(x + w - 10, y, 6, 4);
+}
+
+// Retro Truck Drawing Helper
+function drawTruck(x, y, w, h, color) {
+    // Wheels
+    ctx.fillStyle = '#111';
+    ctx.fillRect(x - 6, y + 15, 8, 22);
+    ctx.fillRect(x + w - 2, y + 15, 8, 22);
+    ctx.fillRect(x - 6, y + h - 30, 8, 22);
+    ctx.fillRect(x + w - 2, y + h - 30, 8, 22);
+
+    // Body / Container
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, [8, 8, 6, 6]);
+    ctx.fill();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Windshield
+    ctx.fillStyle = '#88ccff';
+    ctx.fillRect(x + 5, y + 10, w - 10, 18);
+
+    // Cargo separator line
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y + 38);
+    ctx.lineTo(x + w, y + 38);
+    ctx.stroke();
 }
 
 // Window Visibility Handler (Auto Pause)
