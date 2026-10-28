@@ -48,8 +48,6 @@ const btnRight = document.getElementById('btnRight');
 // Audio Context (Web Audio API)
 let audioCtx = null;
 let isMuted = false;
-let engineOsc = null;
-let engineGain = null;
 
 function initAudio() {
     if (audioCtx) return;
@@ -81,7 +79,6 @@ function playSound(type) {
         osc.start(now);
         osc.stop(now + 0.15);
     } else if (type === 'crash') {
-        // Noise buffer for explosion/crash
         const bufferSize = audioCtx.sampleRate * 0.5;
         const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
         const data = buffer.getChannelData(0);
@@ -112,12 +109,12 @@ function playSound(type) {
     }
 }
 
-// Game Variables
+// Game Variables (Adjusted speed & gradual acceleration)
 let score = 0;
 let distance = 0;
 let speed = 0;
-let maxSpeed = 300;
-let acceleration = 0.5;
+let maxSpeed = 140; // Max speed reduced to a realistic 140 KM/H
+let acceleration = 0.2; // Slower, gradual acceleration rate
 let roadScroll = 0;
 let highScore = localStorage.getItem('roadFighterHighScore') || 0;
 
@@ -137,7 +134,7 @@ const player = {
     targetLane: 1.5, // 0 to 3
     color: '#ff2222',
     roofColor: '#ffffff',
-    steerSpeed: 0.15
+    steerSpeed: 0.25
 };
 
 // Entities
@@ -174,40 +171,43 @@ function triggerShake(duration, intensity) {
     screenShakeIntensity = intensity;
 }
 
+// Lane Shift Helper for snappy button/tap response
+function shiftLane(direction) {
+    if (gameState !== STATE.PLAYING) return;
+    let currentLane = Math.round(player.targetLane);
+    if (direction === 'left') {
+        player.targetLane = Math.max(0, currentLane - 1);
+    } else if (direction === 'right') {
+        player.targetLane = Math.min(numLanes - 1, currentLane + 1);
+    }
+}
+
 // Event Listeners for Controls
 function setupInputs() {
     // Keyboard
     window.addEventListener('keydown', (e) => {
-        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') input.left = true;
-        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') input.right = true;
+        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') shiftLane('left');
+        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') shiftLane('right');
         if (e.key === 'p' || e.key === 'P') togglePause();
     });
 
-    window.addEventListener('keyup', (e) => {
-        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') input.left = false;
-        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') input.right = false;
-    });
-
-    // Touch Buttons pointer events
+    // Touch Buttons pointer events (Instant lane change on tap/click)
     const bindButton = (elem, direction) => {
         elem.addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            input[direction] = true;
+            shiftLane(direction);
             elem.classList.add('pressed');
         });
         elem.addEventListener('pointerup', (e) => {
             e.preventDefault();
-            input[direction] = false;
             elem.classList.remove('pressed');
         });
         elem.addEventListener('pointercancel', (e) => {
             e.preventDefault();
-            input[direction] = false;
             elem.classList.remove('pressed');
         });
         elem.addEventListener('pointerleave', (e) => {
             e.preventDefault();
-            input[direction] = false;
             elem.classList.remove('pressed');
         });
     };
@@ -220,14 +220,14 @@ function setupInputs() {
         input.touchStartX = e.clientX;
     });
 
-    canvas.addEventListener('pointermove', (e) => {
+    canvas.addEventListener('pointerup', (e) => {
         if (gameState !== STATE.PLAYING) return;
         const diff = e.clientX - input.touchStartX;
-        if (Math.abs(diff) > 30) {
+        if (Math.abs(diff) > 35) {
             if (diff > 0) {
-                player.targetLane = Math.min(numLanes - 0.5, player.targetLane + 0.1);
+                shiftLane('right');
             } else {
-                player.targetLane = Math.max(0.5, player.targetLane - 0.1);
+                shiftLane('left');
             }
         }
     });
@@ -282,6 +282,7 @@ function startGame() {
     score = 0;
     distance = 0;
     speed = 0;
+    maxSpeed = 140;
     enemies = [];
     particles = [];
     player.targetLane = 1.5;
@@ -320,7 +321,7 @@ function gameOver() {
 let spawnTimer = 0;
 function updateEnemies(dt) {
     spawnTimer += speed * dt;
-    if (spawnTimer > 180) {
+    if (spawnTimer > 200) {
         spawnTimer = 0;
         const lane = Math.floor(Math.random() * numLanes);
         const enemyX = roadLeft + lane * laneWidth + (laneWidth - player.width) / 2;
@@ -332,7 +333,7 @@ function updateEnemies(dt) {
             y: -100,
             width: player.width,
             height: player.height,
-            speed: (Math.random() * 1.5 + 2.5) * (speed / 150 + 0.5),
+            speed: (Math.random() * 1.0 + 1.8) * (speed / 100 + 0.4),
             color: enemyColor,
             passed: false
         });
@@ -340,7 +341,7 @@ function updateEnemies(dt) {
 
     for (let i = enemies.length - 1; i >= 0; i--) {
         let en = enemies[i];
-        en.y += (speed - en.speed) * dt * 3;
+        en.y += (speed - en.speed) * dt * 2.5;
 
         // Check if player passed enemy
         if (!en.passed && en.y > player.y + player.height) {
@@ -355,7 +356,7 @@ function updateEnemies(dt) {
             continue;
         }
 
-        // Collision Detection (AABB with safety margin)
+        // Collision Detection
         const margin = 6;
         if (
             player.x + margin < en.x + en.width - margin &&
@@ -363,7 +364,6 @@ function updateEnemies(dt) {
             player.y + margin < en.y + en.height - margin &&
             player.y + player.height - margin > en.y + margin
         ) {
-            // Collision! Create explosion particles
             createExplosion(player.x + player.width / 2, player.y + player.height / 2);
             gameOver();
         }
@@ -394,29 +394,21 @@ function gameLoop(time) {
     lastTime = time;
 
     if (gameState === STATE.PLAYING) {
-        // Handle input steering
-        if (input.left) {
-            player.targetLane = Math.max(0, player.targetLane - player.steerSpeed);
-        }
-        if (input.right) {
-            player.targetLane = Math.min(numLanes - 1, player.targetLane + player.steerSpeed);
-        }
-
-        // Smooth movement to target lane center
+        // Smoothly slide to target lane
         const targetX = roadLeft + player.targetLane * laneWidth + (laneWidth - player.width) / 2;
-        player.x += (targetX - player.x) * 0.2;
+        player.x += (targetX - player.x) * 0.3;
 
-        // Acceleration & Speed
+        // Gradual Acceleration
         if (speed < maxSpeed) {
             speed += acceleration;
         }
 
-        roadScroll += speed * dt * 2.5;
-        distance += speed * dt * 0.1;
-        score += speed * dt * 0.2;
+        roadScroll += speed * dt * 2.0;
+        distance += speed * dt * 0.05;
+        score += speed * dt * 0.1;
 
-        // Increase difficulty gradually
-        maxSpeed = 300 + Math.floor(score / 2000) * 30;
+        // Very gradual difficulty progression
+        maxSpeed = 140 + Math.min(60, Math.floor(score / 3000) * 10);
 
         updateEnemies(dt);
 
@@ -451,7 +443,7 @@ function render() {
         ctx.translate(offsetX, offsetY);
     }
 
-    // Clear background (Grass / Off-road)
+    // Clear background (Grass)
     ctx.fillStyle = '#228833';
     ctx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
 
@@ -483,11 +475,11 @@ function render() {
         ctx.lineTo(laneX, VIRTUAL_HEIGHT);
         ctx.stroke();
     }
-    ctx.setLineDash([]); // Reset line dash
+    ctx.setLineDash([]);
 
     // Draw Scenery (Trees / Rocks)
     scenery.forEach(sc => {
-        sc.y += speed * 0.05;
+        sc.y += speed * 0.04;
         if (sc.y > VIRTUAL_HEIGHT + 50) {
             sc.y = -50;
             sc.side = Math.random() > 0.5 ? 'left' : 'right';
@@ -519,13 +511,12 @@ function render() {
     // Draw Player Car
     if (gameState === STATE.PLAYING || gameState === STATE.PAUSED) {
         drawCar(player.x, player.y, player.width, player.height, player.color, player.roofColor);
-        // Draw headlights glow
         ctx.fillStyle = 'rgba(255, 255, 200, 0.4)';
         ctx.fillRect(player.x + 4, player.y - 10, 8, 10);
         ctx.fillRect(player.x + player.width - 12, player.y - 10, 8, 10);
     }
 
-    // Draw Particles (Explosion / Sparks)
+    // Draw Particles
     particles.forEach(p => {
         ctx.fillStyle = p.color;
         ctx.globalAlpha = p.life;
@@ -540,14 +531,12 @@ function render() {
 
 // Retro Car Drawing Helper
 function drawCar(x, y, w, h, bodyColor, accentColor) {
-    // Wheels
     ctx.fillStyle = '#111';
     ctx.fillRect(x - 5, y + 10, 6, 16);
     ctx.fillRect(x + w - 1, y + 10, 6, 16);
     ctx.fillRect(x - 5, y + h - 22, 6, 16);
     ctx.fillRect(x + w - 1, y + h - 22, 6, 16);
 
-    // Body
     ctx.fillStyle = bodyColor;
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, [10, 10, 8, 8]);
@@ -556,11 +545,9 @@ function drawCar(x, y, w, h, bodyColor, accentColor) {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Windshield & Roof
     ctx.fillStyle = accentColor;
     ctx.fillRect(x + 6, y + 20, w - 12, 22);
 
-    // Headlights / Taillights
     ctx.fillStyle = '#ffcc00';
     ctx.fillRect(x + 4, y, 6, 4);
     ctx.fillRect(x + w - 10, y, 6, 4);
