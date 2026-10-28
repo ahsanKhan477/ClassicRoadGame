@@ -408,7 +408,7 @@ function gameLoop(time) {
         score += speed * dt * 0.1;
 
         // Very gradual difficulty progression
-        maxSpeed = 140 + Math.min(60, Math.floor(score / 3000) * 10);
+        maxSpeed = 160 + Math.min(60, Math.floor(score / 3000) * 10);
 
         updateEnemies(dt);
 
